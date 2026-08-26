@@ -232,27 +232,13 @@ def mask_applies(pattern: Int, row: Int, col: Int) -> Bool:
     return (product % 3 + (row + col) % 2) % 2 == 0
 
 
-@export("mqr_map_data")
-def mqr_map_data(
-    matrix_addr: Int,
-    matrix_len: Int,
+def map_data_kernel(
+    matrix: BytePtr,
     size: Int,
-    data_addr: Int,
+    data: BytePtr,
     data_len: Int,
     pattern: Int,
-) abi("C") -> Int:
-    if (
-        matrix_addr == 0
-        or size < 1
-        or matrix_len < size * size
-        or data_addr == 0
-        or data_len < 0
-        or pattern < 0
-        or pattern > 7
-    ):
-        return -1
-    var matrix = BytePtr(unsafe_from_address=matrix_addr)
-    var data = BytePtr(unsafe_from_address=data_addr)
+) -> Int:
     var direction = -1
     var row = size - 1
     var bit_index = 7
@@ -287,15 +273,39 @@ def mqr_map_data(
     return 0
 
 
+@export("mqr_map_data")
+def mqr_map_data(
+    matrix_addr: Int,
+    matrix_len: Int,
+    size: Int,
+    data_addr: Int,
+    data_len: Int,
+    pattern: Int,
+) abi("C") -> Int:
+    if (
+        matrix_addr == 0
+        or size < 1
+        or matrix_len < size * size
+        or data_addr == 0
+        or data_len < 0
+        or pattern < 0
+        or pattern > 7
+    ):
+        return -1
+    return map_data_kernel(
+        BytePtr(unsafe_from_address=matrix_addr),
+        size,
+        BytePtr(unsafe_from_address=data_addr),
+        data_len,
+        pattern,
+    )
+
+
 def same(matrix: BytePtr, a: Int, b: Int) -> Bool:
     return matrix[a] == matrix[b]
 
 
-@export("mqr_lost_point")
-def mqr_lost_point(matrix_addr: Int, matrix_len: Int, size: Int) abi("C") -> Int:
-    if matrix_addr == 0 or size < 1 or matrix_len < size * size:
-        return -1
-    var matrix = BytePtr(unsafe_from_address=matrix_addr)
+def lost_point_kernel(matrix: BytePtr, size: Int) -> Int:
     var penalty = 0
 
     for row in range(size):
@@ -401,3 +411,80 @@ def mqr_lost_point(matrix_addr: Int, matrix_len: Int, size: Int) abi("C") -> Int
     var imbalance = abs(dark * 100 - size * size * 50)
     penalty += (imbalance // (size * size * 5)) * 10
     return penalty
+
+
+@export("mqr_lost_point")
+def mqr_lost_point(matrix_addr: Int, matrix_len: Int, size: Int) abi("C") -> Int:
+    if matrix_addr == 0 or size < 1 or matrix_len < size * size:
+        return -1
+    return lost_point_kernel(
+        BytePtr(unsafe_from_address=matrix_addr), size
+    )
+
+
+def copy_matrix(source: BytePtr, destination: BytePtr, count: Int):
+    comptime W = simd_width_of[DType.float64]()
+    var vector_end = count - count % W
+    for i in range(0, vector_end, W):
+        destination.store(i, source.load[width=W](i))
+    for i in range(vector_end, count):
+        destination[i] = source[i]
+
+
+def clear_test_type_info(matrix: BytePtr, size: Int):
+    for i in range(15):
+        if i < 6:
+            matrix[i * size + 8] = 0
+        elif i < 8:
+            matrix[(i + 1) * size + 8] = 0
+        else:
+            matrix[(size - 15 + i) * size + 8] = 0
+
+        if i < 8:
+            matrix[8 * size + size - i - 1] = 0
+        elif i < 9:
+            matrix[8 * size + 15 - i] = 0
+        else:
+            matrix[8 * size + 14 - i] = 0
+    matrix[(size - 8) * size + 8] = 0
+    if size >= 45:
+        for i in range(18):
+            matrix[(i // 3) * size + i % 3 + size - 11] = 0
+            matrix[(i % 3 + size - 11) * size + i // 3] = 0
+
+
+@export("mqr_best_mask")
+def mqr_best_mask(
+    template_addr: Int,
+    template_len: Int,
+    size: Int,
+    data_addr: Int,
+    data_len: Int,
+    work_addr: Int,
+    work_len: Int,
+) abi("C") -> Int:
+    var module_count = size * size
+    if (
+        template_addr == 0
+        or size < 1
+        or template_len < module_count
+        or data_addr == 0
+        or data_len < 0
+        or work_addr == 0
+        or work_len < module_count
+    ):
+        return -1
+    var template = BytePtr(unsafe_from_address=template_addr)
+    var data = BytePtr(unsafe_from_address=data_addr)
+    var work = BytePtr(unsafe_from_address=work_addr)
+    var best_pattern = 0
+    var best_penalty = 0
+    for pattern in range(8):
+        copy_matrix(template, work, module_count)
+        clear_test_type_info(work, size)
+        _ = map_data_kernel(work, size, data, data_len, pattern)
+        var penalty = lost_point_kernel(work, size)
+        if pattern == 0 or penalty < best_penalty:
+            best_penalty = penalty
+            best_pattern = pattern
+    return best_pattern

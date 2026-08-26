@@ -156,6 +156,19 @@ def test_mask_penalty_simd_remainder_matches_upstream():
     assert util.lost_point(matrix) == upstream_util.lost_point(matrix)
 
 
+@pytest.mark.parametrize("version", [1, 7, 20, 40])
+def test_best_mask_fused_simd_tail_matches_upstream(version):
+    payload = b"hello"
+    ours = mojo_qrcode.QRCode(version=version, border=0)
+    reference = qrcode.QRCode(version=version, border=0)
+    ours.add_data(payload, optimize=0)
+    reference.add_data(payload, optimize=0)
+    ours.make(fit=False)
+    reference.make(fit=False)
+    assert ours.mask_pattern is None
+    assert ours.modules == reference.modules
+
+
 @pytest.mark.parametrize("modules", [[], [[0, 1]], [[0, 256], [1, 0]]])
 def test_mask_penalty_rejects_unsafe_matrices(modules):
     with pytest.raises(ValueError):
@@ -175,6 +188,7 @@ def test_ffi_rejects_invalid_lengths_without_dereferencing():
     ffi = util.lib()
     assert ffi.mqr_rs_encode(0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0) == -1
     assert ffi.mqr_lost_point(0, 0, 0) == -1
+    assert ffi.mqr_best_mask(0, 0, 0, 0, 0, 0, 0) == -1
 
 
 @pytest.mark.parametrize("version", [1, 7, 10, 20, 27, 40])

@@ -21,6 +21,7 @@ _SIGNATURES = {
     "mqr_interleave_rs": ([I] * 15, I),
     "mqr_map_data": ([I] * 6, I),
     "mqr_lost_point": ([I] * 3, I),
+    "mqr_best_mask": ([I] * 7, I),
 }
 
 

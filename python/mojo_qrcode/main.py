@@ -150,6 +150,15 @@ class QRCode:
         self.setup_type_info(test, mask_pattern)
         if self.version >= 7:
             self.setup_type_number(test)
+        self._ensure_data_cache()
+        self.modules = util.map_data(
+            self.modules,
+            self._data_array,
+            mask_pattern,
+            return_array=test,
+        )
+
+    def _ensure_data_cache(self):
         if self.data_cache is None:
             self.data_cache = util.create_data(
                 self.version, self.error_correction, self.data_list
@@ -157,12 +166,6 @@ class QRCode:
             self._data_array = np.asarray(self.data_cache, dtype=np.uint8)
         elif self._data_array is None:
             self._data_array = np.asarray(self.data_cache, dtype=np.uint8)
-        self.modules = util.map_data(
-            self.modules,
-            self._data_array,
-            mask_pattern,
-            return_array=test,
-        )
 
     def setup_position_probe_pattern(self, row, col):
         for r in range(-1, 8):
@@ -198,15 +201,14 @@ class QRCode:
         return self.version
 
     def best_mask_pattern(self):
-        best_penalty = 0
-        best_pattern = 0
-        for pattern in range(8):
-            self.makeImpl(True, pattern)
-            penalty = util.lost_point(self.modules)
-            if pattern == 0 or penalty < best_penalty:
-                best_penalty = penalty
-                best_pattern = pattern
-        return best_pattern
+        self.modules_count = self.version * 4 + 17
+        if self.version not in precomputed_qr_arrays:
+            self.makeImpl(True, 0)
+        else:
+            self._ensure_data_cache()
+        return util.best_mask_pattern(
+            precomputed_qr_arrays[self.version], self._data_array
+        )
 
     def setup_timing_pattern(self):
         for r in range(8, self.modules_count - 8):

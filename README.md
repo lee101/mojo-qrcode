@@ -78,11 +78,11 @@ above 1 mean `mojo-qrcode` is faster.
 
 | Case | mojo-qrcode | qrcode 8.2 | Upstream / Mojo | Result |
 |---|---:|---:|---:|---|
-| RS parity, 121 data + 30 ECC | 0.040 ms | 1.489 ms | 37.06x | faster |
-| Codewords, version 40-M, 2000 B | 1.279 ms | 24.240 ms | 18.96x | faster |
-| QR matrix, version 20-M, mask 3 | 0.943 ms | 15.411 ms | 16.35x | faster |
-| QR matrix, version 20-M, best mask | 6.346 ms | 62.640 ms | 9.87x | faster |
-| QR matrix, version 1-M, best mask | 0.794 ms | 2.313 ms | 2.91x | faster |
+| RS parity, 121 data + 30 ECC | 0.019 ms | 1.405 ms | 72.28x | faster |
+| Codewords, version 40-M, 2000 B | 0.752 ms | 24.391 ms | 32.42x | faster |
+| QR matrix, version 20-M, mask 3 | 0.525 ms | 9.327 ms | 17.77x | faster |
+| QR matrix, version 20-M, best mask | 2.991 ms | 59.594 ms | 19.93x | faster |
+| QR matrix, version 1-M, best mask | 0.236 ms | 2.219 ms | 9.39x | faster |
 
 These are local measurements, not portable performance guarantees. The small
 version-1 case includes Python object construction, NumPy staging, and FFI
@@ -90,11 +90,14 @@ overhead; the larger cases better expose the accelerated kernels.
 
 The CPU path packs byte payloads a byte at a time, exposes the backing
 `bytearray` to NumPy without a copy, reuses contiguous matrix templates during
-mask selection, and scores the dark-module population with SIMD plus a scalar
-remainder loop. Reed-Solomon generators shared by a block layout are built
-once.
+mask selection, and runs all eight mask trials behind one FFI call. Template
+copies and dark-module scoring use SIMD plus scalar remainder loops.
+Reed-Solomon generators shared by a block layout are built once.
 
-No GPU or multithreaded path is included.
+No GPU or multithreaded path is included. QR placement and scoring are
+branch-heavy, low-arithmetic-intensity kernels (well below roughly two FLOPs
+per byte moved), while even the largest matrix is only 177 by 177; transfer and
+thread-launch overhead would dominate this workload.
 
 ## How it works
 
@@ -126,7 +129,7 @@ pixi run test
 pixi run bench
 ```
 
-The test suite contains 292 tests, including exhaustive codeword parity for
+The test suite contains 296 tests, including exhaustive codeword parity for
 all 160 version/error-correction combinations, all eight masks, independent
 Reed-Solomon comparisons, full-matrix parity through version 40, image parity,
 SIMD and bit-packing tail cases, and API behavior.

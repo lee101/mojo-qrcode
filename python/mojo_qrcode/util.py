@@ -425,3 +425,32 @@ def map_data(modules, data, mask_pattern: int, *, return_array=False):
     if return_array:
         return matrix
     return matrix.astype(bool).tolist()
+
+
+def best_mask_pattern(template: np.ndarray, codewords: np.ndarray) -> int:
+    if (
+        not isinstance(template, np.ndarray)
+        or template.dtype != np.uint8
+        or template.ndim != 2
+        or template.shape[0] != template.shape[1]
+        or not template.flags.c_contiguous
+    ):
+        raise ValueError("template must be a contiguous square uint8 array")
+    data = np.ascontiguousarray(codewords, dtype=np.uint8)
+    if data.ndim != 1 or data.size == 0:
+        raise ValueError("codewords must be a non-empty one-dimensional array")
+    work = np.empty_like(template)
+    pattern = int(
+        lib().mqr_best_mask(
+            addr(template),
+            template.size,
+            template.shape[0],
+            addr(data),
+            data.size,
+            addr(work),
+            work.size,
+        )
+    )
+    if not 0 <= pattern <= 7:
+        raise RuntimeError("Mojo best-mask kernel rejected its validated buffers")
+    return pattern
