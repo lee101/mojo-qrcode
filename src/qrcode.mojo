@@ -405,7 +405,7 @@ def lost_point_kernel(matrix: BytePtr, size: Int) -> Int:
     var module_count = size * size
     var vector_end = module_count - module_count % W
     for i in range(0, vector_end, W):
-        dark += Int(matrix.load[width=W](i).reduce_add())
+        dark += Int(matrix.unsafe_load[width=W](i).reduce_add())
     for i in range(vector_end, module_count):
         dark += 1 if matrix[i] == 1 else 0
     var imbalance = abs(dark * 100 - size * size * 50)
@@ -426,7 +426,7 @@ def copy_matrix(source: BytePtr, destination: BytePtr, count: Int):
     comptime W = simd_width_of[DType.float64]()
     var vector_end = count - count % W
     for i in range(0, vector_end, W):
-        destination.store(i, source.load[width=W](i))
+        destination.store(i, source.unsafe_load[width=W](i))
     for i in range(vector_end, count):
         destination[i] = source[i]
 
